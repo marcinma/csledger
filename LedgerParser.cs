@@ -215,7 +215,60 @@ public sealed class LedgerParser
 
         return new Money(value, currency);
     }
+    private static List<Posting> ParsePostingBlock(IReadOnlyList<string> lines, ref int index)
+    {
+        var postings = new List<Posting>();
+        var pendingTotals = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
 
+        while (index < lines.Count)
+        {
+            var line = lines[index];
+
+            if (string.IsNullOrWhiteSpace(line))
+                break;
+
+            if (!line.StartsWith('\t') && !Regex.IsMatch(line, @"^ {2,}"))
+                break;
+
+            var posting = ParsePosting(line.Trim());
+
+            if (posting.IsBalancingPosting)
+            {
+                foreach (var item in pendingTotals)
+                {
+                    postings.Add(new Posting
+                    {
+                        AccountPath = posting.AccountPath,
+                        Amount = new Money(-item.Value, item.Key),
+                        BalancingAccountPath = posting.AccountPath
+                    });
+                }
+
+                pendingTotals.Clear();
+                index++;
+                continue;
+            }
+
+            if (posting.Amount != null)
+            {
+                var money = posting.Amount.Value;
+
+                if (!pendingTotals.ContainsKey(money.Currency))
+                    pendingTotals[money.Currency] = 0;
+
+                pendingTotals[money.Currency] += money.Amount;
+
+                postings.Add(posting);
+            }
+
+            index++;
+        }
+
+        if (pendingTotals.Values.Any(value => value != 0))
+            throw new InvalidOperationException("Unbalanced posting block.");
+
+        return postings;
+    }
     private static void ApplyPostings(Ledger ledger)
     {
         foreach (var day in ledger.Days)

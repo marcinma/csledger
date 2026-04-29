@@ -1,5 +1,6 @@
 public sealed class Posting
 {
+    public string? BalancingAccountPath { get; init; }
     public string AccountPath { get; init; } = "";
     public bool IsAssignment { get; init; }
     public bool IsBalancingPosting { get; init; }
